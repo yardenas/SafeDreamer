@@ -38,6 +38,7 @@ jax==0.3.25
 jax-jumpy==1.0.0
 jaxlib==0.3.25+cuda11.cudnn82
 keras==2.13.1
+Keras-Preprocessing==1.1.2
 kiwisolver==1.4.7
 labmaze==1.0.6
 libclang==18.1.1
@@ -82,14 +83,16 @@ six==1.16.0
 smmap==5.0.1
 tensorboard==2.13.0
 tensorboard-data-server==0.7.2
+tensorboard-plugin-wit==1.8.1
 tensorflow==2.13.1
 tensorflow-estimator==2.13.0
+tensorflow-gpu==2.2.0
 tensorflow-io-gcs-filesystem==0.34.0
 tensorflow-probability==0.21.0
 termcolor==2.4.0
 toolz==0.12.1
 tqdm==4.66.5
-typing-extensions==3.10.0.2
+typing_extensions==4.5.0
 urllib3==2.2.2
 wandb==0.17.9
 Werkzeug==3.0.4
