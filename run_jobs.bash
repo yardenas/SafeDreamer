@@ -25,7 +25,8 @@ python3 SafeDreamer/train.py \
     --method bsrp_lag \
     --jax.logical_gpus 0 \
     --task safeadaptationgym_point_${task} \
-    --seed ${seed}
+    --seed ${seed} \
+    -- logdir /cluster/scratch/yardas/safedreamer/logdir_${task}_seed${seed}
 EOT
 
   done
