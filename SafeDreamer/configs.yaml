@@ -58,6 +58,7 @@ defaults:
     metadrive: {size: [64,64], repeat: 4, render: False, obs_key: 'image'}
     carracing: {size: [64,64], repeat: 2, render: False, obs_key: 'image'}
     safetygym: {size: [64,64], repeat: 1, render: False, obs_key: 'observation', camera_name: 'fixedfar'}
+    safeadatptationgym: {size: [64,64], repeat: 2, render: False, obs_key: 'observation', camera_name: 'fixedfar'}
     safetygymcoor: {size: [64,64], repeat: 5, render: False, obs_key: 'observation', camera_name: 'fixedfar'}
     safetygymmujoco: {size: [64,64], repeat: 1, render: False, obs_key: 'observation'}
   # Agent
@@ -125,10 +126,8 @@ bsrp_lag:
   expl_behavior: None
   use_cost: True
   cost_weight: 10.0
-  cost_limit: 2.0
-  task: safetygym_SafetyPointGoal1-v0
+  cost_limit: 25.0
   envs.amount: 1
-  env.safetygym: {repeat: 4,render: True, obs_key: 'image', camera_name: 'vision_front_back'}
   run.train_ratio: 512
   pessimistic: True
   run:
