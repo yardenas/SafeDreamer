@@ -168,6 +168,7 @@ def make_env(config, **overrides):
       'dummy': 'embodied.envs.dummy:Dummy',
       'gym': 'embodied.envs.from_gym:FromGym',
       'safetygym': 'embodied.envs.safetygym:SafetyGym',
+      'safeadaptationgym': 'embodied.envs.safeadaptationgym:SafeAdaptationGym',
       'safetygymcoor': 'embodied.envs.safetygymcoor:SafetyGymCoor',
       'safetygymmujoco': 'embodied.envs.safetygym_mujoco:SafetyGymMujoco',
       'dm': 'embodied.envs.from_dmenv:FromDM',
