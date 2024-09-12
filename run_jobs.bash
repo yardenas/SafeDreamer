@@ -13,7 +13,7 @@ for task in "${tasks[@]}"; do
 #SBATCH --job-name=Train_${task}_Seed${seed}      # Job name for each task/seed combination
 #SBATCH --output=train_${task}_seed${seed}_%j.log # Output log for each job
 #SBATCH --error=train_${task}_seed${seed}_%j.err  # Error log for each job
-#SBATCH --gpus=rtx_4090:1
+#SBATCH --gpus=rtx_2080:1
 #SBATCH --cpus-per-task=10                         # Number of CPU cores
 #SBATCH --mem-per-cpu=10240
 #SBATCH --time=4:00:00                           # Time limit
@@ -26,7 +26,8 @@ python3 SafeDreamer/train.py \
     --jax.logical_gpus 0 \
     --task safeadaptationgym_point_${task} \
     --seed ${seed} \
-    -- logdir /cluster/scratch/yardas/safedreamer/logdir_${task}_seed${seed}
+    --run.steps 5e6 \
+    --logdir /cluster/scratch/yardas/safedreamer/logdir_${task}_seed${seed}
 EOT
 
   done
