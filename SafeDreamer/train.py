@@ -117,7 +117,7 @@ def make_logger(parsed, logdir, step, config):
       embodied.logger.TerminalOutput(config.filter),
       embodied.logger.JSONLOutput(logdir, 'metrics.jsonl'),
       embodied.logger.JSONLOutput(logdir, 'scores.jsonl', 'episode/score|episode/cost'),
-      embodied.logger.TensorBoardOutput(logdir),
+      # embodied.logger.TensorBoardOutput(logdir),
       embodied.logger.WandBOutput(logdir, config),
       # embodied.logger.MLFlowOutput(logdir.name),
   ], multiplier)
