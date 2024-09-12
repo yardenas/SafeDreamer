@@ -27,6 +27,7 @@ python3 SafeDreamer/train.py \
     --task safeadaptationgym_point_${task} \
     --seed ${seed} \
     --run.steps 5e6 \
+    --envs.amount 10 \
     --logdir /cluster/scratch/yardas/safedreamer/logdir_${task}_seed${seed}
 EOT
 
