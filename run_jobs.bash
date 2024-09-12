@@ -5,7 +5,7 @@ tasks=("go_to_goal" "push_box" "press_buttons")
 
 # Loop over tasks and seeds
 for task in "${tasks[@]}"; do
-  for seed in {0..5}; do
+  for seed in {0..4}; do
     # Submit the job for each combination of task and seed
     sbatch <<EOT
 #!/bin/bash
@@ -27,6 +27,7 @@ python3 SafeDreamer/train.py \
     --task safeadaptationgym_point_${task} \
     --seed ${seed} \
     --run.steps 5e6 \
+    --envs.amount 5 \
     --logdir /cluster/scratch/yardas/safedreamer/logdir_${task}_seed${seed}
 EOT
 
