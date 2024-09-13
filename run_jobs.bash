@@ -28,6 +28,7 @@ python3 SafeDreamer/train.py \
     --seed ${seed} \
     --run.steps 5e6 \
     --envs.amount 5 \
+    --run.train_ratio 16 \
     --logdir /cluster/scratch/yardas/safedreamer/logdir_${task}_seed${seed}
 EOT
 
