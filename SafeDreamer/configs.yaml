@@ -128,7 +128,7 @@ bsrp_lag:
   cost_weight: 10.0
   cost_limit: 25.0
   envs.amount: 1
-  run.train_ratio: 512
+  run.train_ratio: 16
   pessimistic: True
   run:
     script: train_eval
@@ -145,6 +145,7 @@ bsrp_lag:
   rssm: {stoch: 48, classes: 48}
   encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
   decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  wrapper: {length: 1000, reset: True, discretize: 0, checks: False}
 
 osrp:
   task_behavior: Greedy
