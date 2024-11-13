@@ -1,0 +1,394 @@
+diff --git a/SafeDreamer/configs.yaml b/SafeDreamer/configs.yaml
+index 8d4163e..cef9c05 100644
+--- a/SafeDreamer/configs.yaml
++++ b/SafeDreamer/configs.yaml
+@@ -58,6 +58,7 @@ defaults:
+     metadrive: {size: [64,64], repeat: 4, render: False, obs_key: 'image'}
+     carracing: {size: [64,64], repeat: 2, render: False, obs_key: 'image'}
+     safetygym: {size: [64,64], repeat: 1, render: False, obs_key: 'observation', camera_name: 'fixedfar'}
++    safeadatptationgym: {size: [64,64], repeat: 2, render: False, obs_key: 'observation', camera_name: 'fixedfar'}
+     safetygymcoor: {size: [64,64], repeat: 5, render: False, obs_key: 'observation', camera_name: 'fixedfar'}
+     safetygymmujoco: {size: [64,64], repeat: 1, render: False, obs_key: 'observation'}
+   # Agent
+@@ -125,11 +126,9 @@ bsrp_lag:
+   expl_behavior: None
+   use_cost: True
+   cost_weight: 10.0
+-  cost_limit: 2.0
+-  task: safetygym_SafetyPointGoal1-v0
++  cost_limit: 25.0
+   envs.amount: 1
+-  env.safetygym: {repeat: 4,render: True, obs_key: 'image', camera_name: 'vision_front_back'}
+-  run.train_ratio: 512
++  run.train_ratio: 16
+   pessimistic: True
+   run:
+     script: train_eval
+@@ -146,6 +145,7 @@ bsrp_lag:
+   rssm: {stoch: 48, classes: 48}
+   encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+   decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
++  wrapper: {length: 1000, reset: True, discretize: 0, checks: False}
+ 
+ osrp:
+   task_behavior: Greedy
+diff --git a/SafeDreamer/embodied/core/config.py b/SafeDreamer/embodied/core/config.py
+index 0c600ed..916bac9 100644
+--- a/SafeDreamer/embodied/core/config.py
++++ b/SafeDreamer/embodied/core/config.py
+@@ -32,7 +32,8 @@ def save(self, filename):
+     elif filename.suffix in ('.yml', '.yaml'):
+       import ruamel.yaml as yaml
+       with io.StringIO() as stream:
+-        yaml.safe_dump(dict(self), stream)
++        yaml_file = yaml.YAML(typ="safe", pure=True)
++        yaml_file.dump(dict(self), stream)
+         filename.write(stream.getvalue())
+     else:
+       raise NotImplementedError(filename.suffix)
+diff --git a/SafeDreamer/embodied/envs/safeadaptationgym.py b/SafeDreamer/embodied/envs/safeadaptationgym.py
+new file mode 100644
+index 0000000..f01c046
+--- /dev/null
++++ b/SafeDreamer/embodied/envs/safeadaptationgym.py
+@@ -0,0 +1,110 @@
++import functools
++import os
++
++import embodied
++import numpy as np
++from gymnasium.wrappers.compatibility import EnvCompatibility
++
++
++class SafeAdaptationEnvCompatibility(EnvCompatibility):
++    def __init__(self, env):
++        super().__init__(env)
++
++    def step(self, action):
++        obs, reward, done, info = self.env.step(action)
++        cost = info["cost"] if "cost" in info.keys() else 0.0
++        return obs, reward, cost, False, False, info
++
++    def reset(self, seed=None, options=None):
++        if seed is not None:
++            self.env.seed(seed)
++        return self.env.reset(options=options), {}
++
++
++class SafeAdaptationGym(embodied.Env):
++    def __init__(
++        self,
++        env,
++        platform="gpu",
++        repeat=1,
++        obs_key="image",
++        render=False,
++        size=(64, 64),
++        camera=-1,
++        mode="train",
++        camera_name="vision",
++    ):
++        # TODO: This env variable is meant for headless GPU machines but may fail
++        # on CPU-only machines.
++        if platform == "gpu" and "MUJOCO_GL" not in os.environ:
++            os.environ["MUJOCO_GL"] = "egl"
++
++        import safe_adaptation_gym
++
++        robot, task = env.split("_", 1)
++
++        env = safe_adaptation_gym.make(
++            robot_name=robot,
++            task_name=task,
++            rgb_observation=True,
++            render_lidar_and_collision=False,
++        )
++
++        self._dmenv = SafeAdaptationEnvCompatibility(env)
++        from . import from_gymnasium
++
++        self._env = from_gymnasium.FromGymnasium(self._dmenv, obs_key=obs_key)
++        self._render = render if mode == "train" else True
++        self._size = size
++        self._camera = camera
++        self._camera_name = camera_name
++        self._repeat = repeat
++        self._mode = mode
++
++    @property
++    def repeat(self):
++        return self._repeat
++
++    @functools.cached_property
++    def obs_space(self):
++        spaces = self._env.obs_space.copy()
++        if self._render:
++            spaces["image"] = embodied.Space(np.uint8, self._size + (3,))
++            if self._camera_name == "vision_front_back":
++                spaces["image2"] = embodied.Space(np.uint8, self._size + (3,))
++
++        return spaces
++
++    @functools.cached_property
++    def act_space(self):
++        return self._env.act_space
++
++    def step(self, action):
++        for key, space in self.act_space.items():
++            if not space.discrete:
++                assert np.isfinite(action[key]).all(), (key, action[key])
++
++        action = action.copy()
++        if action["reset"]:
++            obs = self._reset()
++        else:
++            reward = 0.0
++            cost = 0.0
++            for i in range(self._repeat):
++                obs = self._env.step(action)
++                reward += obs["reward"]
++                if "cost" in obs.keys():
++                    cost += obs["cost"]
++                if obs["is_last"] or obs["is_terminal"]:
++                    break
++            obs["reward"] = np.float32(reward)
++            if "cost" in obs.keys():
++                obs["cost"] = np.float32(cost)
++        return obs
++
++    def _reset(self):
++        obs = self._env.step({"reset": True})
++        return obs
++
++    def render(self):
++        return self._dmenv.render()
+diff --git a/SafeDreamer/train.py b/SafeDreamer/train.py
+index 0dec9a3..b1744f4 100644
+--- a/SafeDreamer/train.py
++++ b/SafeDreamer/train.py
+@@ -30,8 +30,7 @@ def main(argv=None):
+   for name in parsed.configs:
+     config = config.update(agt.Agent.configs[name])
+   config = embodied.Flags(config).parse(other)
+-  now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+-  logdir_algo = config.logdir + now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
++  logdir_algo = config.logdir
+   args = embodied.Config(
+       **config.run, logdir=logdir_algo, use_cost=config.use_cost,
+       batch_steps=config.batch_size * config.batch_length)
+@@ -117,8 +116,8 @@ def make_logger(parsed, logdir, step, config):
+       embodied.logger.TerminalOutput(config.filter),
+       embodied.logger.JSONLOutput(logdir, 'metrics.jsonl'),
+       embodied.logger.JSONLOutput(logdir, 'scores.jsonl', 'episode/score|episode/cost'),
+-      embodied.logger.TensorBoardOutput(logdir),
+-      # embodied.logger.WandBOutput(logdir, config),
++      # embodied.logger.TensorBoardOutput(logdir),
++      embodied.logger.WandBOutput(logdir, config),
+       # embodied.logger.MLFlowOutput(logdir.name),
+   ], multiplier)
+   return logger
+@@ -168,6 +167,7 @@ def make_env(config, **overrides):
+       'dummy': 'embodied.envs.dummy:Dummy',
+       'gym': 'embodied.envs.from_gym:FromGym',
+       'safetygym': 'embodied.envs.safetygym:SafetyGym',
++      'safeadaptationgym': 'embodied.envs.safeadaptationgym:SafeAdaptationGym',
+       'safetygymcoor': 'embodied.envs.safetygymcoor:SafetyGymCoor',
+       'safetygymmujoco': 'embodied.envs.safetygym_mujoco:SafetyGymMujoco',
+       'dm': 'embodied.envs.from_dmenv:FromDM',
+diff --git a/requirements.txt b/requirements.txt
+index 41885bb..251c931 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,12 +1,179 @@
+-cloudpickle
+-wandb
+-moviepy
+-matplotlib
+-imageio
+-numpy
+-optax==0.1.4
+-rich
+-ruamel.yaml==0.17.21
+-opencv-python
+-tensorflow
+-tensorflow_probability
+\ No newline at end of file
++absl-py==2.1.0
++antlr4-python3-runtime==4.9.3
++appdirs==1.4.4
++asttokens==2.4.1
++attrs==22.1.0
++certifi==2024.7.4
++cffi==1.15.1
++cfgv==3.4.0
++charset-normalizer==3.3.2
++chex==0.1.85
++click==8.1.7
++cloudpickle==3.0.0
++comm==0.2.2
++contourpy==1.2.0
++cycler==0.12.1
++Cython==0.29.32
++dacite==1.8.1
++debugpy==1.8.1
++decorator==4.4.2
++distlib==0.3.8
++distrax==0.1.5
++dm-control==1.0.16
++dm-env==1.6
++dm-tree==0.1.8
++docker-pycreds==0.4.0
++equinox==0.11.4
++etils==1.7.0
++exceptiongroup==1.2.0
++executing==2.0.1
++Farama-Notifications==0.0.4
++fasteners==0.18
++filelock==3.13.1
++flash-attn==2.5.5
++flatbuffers==22.12.6
++fonttools==4.50.0
++fsspec==2024.3.0
++gast==0.5.4
++gitdb==4.0.11
++GitPython==3.1.42
++glfw==2.7.0
++google-auth==2.15.0
++grpcio==1.62.1
++gym==0.26.2
++gym-notices==0.0.8
++gymnasium==0.29.1
++hydra-core==1.3.2
++hydra-submitit-launcher==1.2.0
++identify==2.5.35
++idna==3.7
++imageio==2.34.0
++imageio-ffmpeg==0.4.9
++importlib-metadata==5.2.0
++importlib_resources==6.3.1
++iniconfig==2.0.0
++ipykernel==6.29.4
++ipython==8.23.0
++jax==0.4.25
++jaxlib @ https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.4.23+cuda11.cudnn86-cp310-cp310-manylinux2014_x86_64.whl#sha256=690ee25f7a34910e2588f7b1bfb7640555954d4a5ab72f372f4f373326c691fd
++jaxtyping==0.2.28
++jedi==0.19.1
++jmp==0.0.2
++jupyter_client==8.6.1
++jupyter_core==5.7.2
++keras==2.11.0
++kiwisolver==1.4.5
++labmaze==1.0.6
++libclang==14.0.6
++lxml==5.1.0
++Markdown==3.6
++MarkupSafe==2.1.5
++matplotlib==3.8.3
++matplotlib-inline==0.1.6
++ml-dtypes==0.2.0
++moviepy==1.0.3
++mujoco==3.1.3
++mujoco-py==2.1.2.14
++mypy==1.9.0
++mypy-extensions==1.0.0
++nanotron @ git+ssh://git@github.com/swiss-ai/nanotron.git@c2cf0f25288ccf9305904f0d5f41bdc0db826ef5
++nest-asyncio==1.6.0
++ninja==1.11.1.1
++nodeenv==1.8.0
++numpy==1.26.4
++nvidia-cublas-cu11==11.11.3.6
++nvidia-cublas-cu12==12.1.3.1
++nvidia-cuda-cupti-cu11==11.8.87
++nvidia-cuda-cupti-cu12==12.1.105
++nvidia-cuda-nvcc-cu11==11.8.89
++nvidia-cuda-nvrtc-cu11==11.8.89
++nvidia-cuda-nvrtc-cu12==12.1.105
++nvidia-cuda-runtime-cu11==11.8.89
++nvidia-cuda-runtime-cu12==12.1.105
++nvidia-cudnn-cu11==8.9.6.50
++nvidia-cudnn-cu12==8.9.2.26
++nvidia-cufft-cu11==10.9.0.58
++nvidia-cufft-cu12==11.0.2.54
++nvidia-curand-cu12==10.3.2.106
++nvidia-cusolver-cu11==11.4.1.48
++nvidia-cusolver-cu12==11.4.5.107
++nvidia-cusparse-cu11==11.7.5.86
++nvidia-cusparse-cu12==12.1.0.106
++nvidia-nccl-cu12==2.19.3
++nvidia-nvjitlink-cu12==12.4.99
++nvidia-nvtx-cu12==12.1.105
++oauthlib==3.2.2
++omegaconf==2.3.0
++opencv-python==4.10.0.84
++opt-einsum==3.3.0
++optax==0.1.9
++packaging==24.0
++pandas==2.2.1
++parso==0.8.4
++pexpect==4.9.0
++pillow==10.4.0
++platformdirs==4.2.0
++pluggy==1.4.0
++pre-commit==3.6.2
++proglog==0.1.10
++prompt-toolkit==3.0.43
++protobuf==4.25.3
++psutil==5.9.8
++ptyprocess==0.7.0
++pure-eval==0.2.2
++pyarrow==15.0.2
++pyarrow-hotfix==0.6
++Pygments==2.17.2
++PyOpenGL==3.1.7
++pyparsing==3.1.2
++pytest==7.4.4
++pytest-mock==3.12.0
++python-dateutil==2.9.0.post0
++python-etcd==0.4.5
++pytz==2024.1
++PyYAML==6.0.1
++pyzmq==25.1.2
++requests==2.32.3
++rsa==4.9
++ruamel.yaml==0.18.6
++ruamel.yaml.clib==0.2.7
++ruff==0.1.15
++safe-adaptation-gym @ git+https://git@github.com/lasgroup/safe-adaptation-gym@1d3acb3cd5790b56929bce70244a3e2ea0da1965
++safetensors==0.4.2
++scipy==1.12.0
++seaborn==0.13.2
++sentry-sdk==2.8.0
++setproctitle==1.3.3
++six==1.16.0
++smmap==5.0.1
++stack-data==0.6.3
++submitit==1.5.1
++tabulate==0.9.0
++tensorboard==2.16.2
++tensorboard-data-server==0.7.2
++tensorboardX==2.6.2.2
++tensorflow==2.11.0
++tensorflow-estimator==2.11.0
++tensorflow-io-gcs-filesystem==0.29.0
++tensorflow-probability==0.24.0
++termcolor==2.1.1
++tokenizers==0.15.2
++tomli==2.0.1
++toolz==0.12.1
++torch==2.2.1
++tornado==6.4.1
++tqdm==4.66.4
++traitlets==5.14.2
++triton==2.2.0
++typeguard==2.13.3
++types-tabulate==0.9.0.20240106
++typing_extensions==4.10.0
++tzdata==2024.1
++urllib3==2.2.2
++virtualenv==20.25.1
++wandb==0.16.6
++wcwidth==0.2.13
++Werkzeug==3.0.3
++wrapt==1.16.0
++xmltodict==0.13.0
++zipp==3.19.2
