@@ -291,7 +291,6 @@ index 41885bb..251c931 100644
 +mujoco-py==2.1.2.14
 +mypy==1.9.0
 +mypy-extensions==1.0.0
-+nanotron @ git+ssh://git@github.com/swiss-ai/nanotron.git@c2cf0f25288ccf9305904f0d5f41bdc0db826ef5
 +nest-asyncio==1.6.0
 +ninja==1.11.1.1
 +nodeenv==1.8.0
@@ -353,7 +352,7 @@ index 41885bb..251c931 100644
 +ruamel.yaml==0.18.6
 +ruamel.yaml.clib==0.2.7
 +ruff==0.1.15
-+safe-adaptation-gym @ git+https://git@github.com/lasgroup/safe-adaptation-gym@1d3acb3cd5790b56929bce70244a3e2ea0da1965
++safe-adaptation-gym @ git+https://git@github.com/<anon>/safe-adaptation-gym@1d3acb3cd5790b56929bce70244a3e2ea0da1965
 +safetensors==0.4.2
 +scipy==1.12.0
 +seaborn==0.13.2
